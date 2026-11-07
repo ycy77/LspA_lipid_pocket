@@ -1,0 +1,9 @@
+# Analysis dependencies only. RFdiffusion, LigandMPNN, HADDOCK, PyMOL,
+# OpenMM/PDBFixer and PyRosetta must use their own compatible environments.
+numpy
+pandas
+scipy
+matplotlib
+seaborn
+biopython
+logomaker

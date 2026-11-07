@@ -1,0 +1,27 @@
+{
+  "cyclic": {
+    "t_values": [50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200],
+    "count_per_t": 100,
+    "contigs": "A1-154/0 8-15",
+    "noise": 0.1,
+    "cyclic": true,
+    "prefix": "cyclic"
+  },
+  "refine": {
+    "t_values": [20, 30, 40, 50],
+    "count_per_t": 100,
+    "contigs": "A1-154/0 0-10/B6-7/0-10",
+    "length": "8-12",
+    "noise": 0.2,
+    "cyclic": true,
+    "prefix": "cyclic_refine"
+  },
+  "linear": {
+    "t_values": [50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200],
+    "count_per_t": 100,
+    "contigs": "A1-154/0  A136-145/0 10-40",
+    "noise": 0.0,
+    "cyclic": false,
+    "prefix": "linear"
+  }
+}
