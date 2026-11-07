@@ -17,20 +17,20 @@ from openmm.app import Modeller
 
 def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
     print(f"Processing {input_pdb_path} -> {output_pdb_path}")
-    # 环境开关：是否补氢，默认跳过；是否清理首残终端氢，默认开启
+    # Environment switches: hydrogen addition defaults off; first-residue terminal-H cleanup defaults on.
     add_hydrogens = os.environ.get('ADD_HYDROGENS', '0').lower() in ['1','true','yes']
     strip_terminal_h = os.environ.get('STRIP_TERMINAL_H', '1').lower() in ['1','true','yes']
     try:
-        # 1. 用PDBFixer彻底修复PDB（补全原子）
+        # 1. Repair missing atoms with PDBFixer.
         fixer = PDBFixer(filename=input_pdb_path)
         fixer.findMissingResidues()
         fixer.findMissingAtoms()
-        fixer.addMissingAtoms()  # 补全缺失的氢和重原子
-        fixer.removeHeterogens(False)  # 保留蛋白质
+        fixer.addMissingAtoms()  # Add missing heavy atoms; hydrogen addition is handled separately.
+        fixer.removeHeterogens(False)  # Remove heterogens and retain the protein.
         modeller = Modeller(fixer.topology, fixer.positions)
         target_chain = None
 
-        # 2. 查找目标链
+        # 2. Locate the target chain.
         for ch in modeller.topology.chains():
             if str(ch.id).strip() == cyclize_chain_id.strip():
                 target_chain = ch
@@ -45,18 +45,18 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                 last_res = residues[-1]
                 print(f"Cyclizing chain B: first={first_res.name} {first_res.id}, last={last_res.name} {last_res.id}")
 
-                # 3. 删除OXT
+                # 3. Remove OXT.
                 atoms_to_delete = [a for a in last_res.atoms() if a.name.strip().upper() == 'OXT']
                 if atoms_to_delete:
                     modeller.delete(atoms_to_delete)
                     print(f"Deleted OXT from {last_res.name} {last_res.id}")
 
-                # 4. 添加闭环肽键（避免重复加键）
+                # 4. Add the ring-closing peptide bond if absent.
                 n_atom = next((a for a in first_res.atoms() if a.name.strip().upper() == 'N'), None)
                 c_atom = next((a for a in last_res.atoms() if a.name.strip().upper() == 'C'), None)
 
                 if n_atom and c_atom:
-                    # 打印 N-C 距离用于验证
+                    # Print the N-C distance for inspection.
                     atom_list = list(modeller.topology.atoms())
                     atom_index_map = {a: i for i, a in enumerate(atom_list)}
                     n_index = atom_index_map.get(n_atom)
@@ -68,7 +68,7 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                         except Exception:
                             pass
 
-                    # 检测是否已有肽键
+                    # Check whether the peptide bond already exists.
                     existing_bonds = list(modeller.topology.bonds())
                     bond_exists = any((b.atom1 == n_atom and b.atom2 == c_atom) or
                                       (b.atom1 == c_atom and b.atom2 == n_atom) for b in existing_bonds)
@@ -78,7 +78,7 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                     else:
                         print(f"Peptide bond already exists for chain {cyclize_chain_id}, skipping addBond")
 
-                    # 可选：清理首残终端氢，避免 Amber 模板误识别为 N 端
+                    # Optionally remove first-residue terminal hydrogens to avoid N-terminal Amber template assignment.
                     if strip_terminal_h:
                         h_names = {"H", "H1", "H2", "H3", "HN", "HT1", "HT2", "HT3"}
                         h_to_delete = [a for a in first_res.atoms() if a.name.strip().upper() in h_names]
@@ -88,13 +88,13 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                 else:
                     print(f"Warning: N/C atoms not found in chain {cyclize_chain_id}")
 
-        # 5. 加载蛋白质专用力场
+        # 5. Load the protein force field.
         forcefield = ForceField(
             'amber14/protein.ff14SB.xml',
             'amber14/tip3p.xml'
         )
 
-        # 关键修正：补氢可控（默认跳过），避免被补氢重建端基导致模板不匹配
+        # Make hydrogen addition optional (off by default) to avoid rebuilding incompatible terminal groups.
         if add_hydrogens:
             try:
                 modeller.addHydrogens(forcefield, pH=7.0)
@@ -104,8 +104,8 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
         else:
             print("Hydrogen addition skipped by env ADD_HYDROGENS=0")
 
-        # 6. 创建系统（带模板缺失的自动补氢回退）
-        # 根据拓扑是否包含周期盒向量选择非键相互作用方法
+        # 6. Create the system, with a hydrogen-addition fallback for missing templates.
+        # Choose the nonbonded method based on periodic box vectors in the topology.
         has_box = None
         try:
             has_box = modeller.topology.getPeriodicBoxVectors()
@@ -140,10 +140,10 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                     used_fix_method = "modeller"
                 except Exception as e2:
                     print(f"Fallback addHydrogens failed: {e2}")
-                    # 二级回退：用 PDBFixer 在当前结构上补氢
+                    # Second fallback: add hydrogens to the current structure using PDBFixer.
                     try:
                         buf = io.StringIO()
-                        # 保留原始链/残基编号以便后续定位目标链
+                        # Preserve chain and residue identifiers for locating the target chain later.
                         PDBFile.writeFile(modeller.topology, modeller.positions, buf, keepIds=True)
                         pdb_str = buf.getvalue()
                         fixer2 = PDBFixer(pdbfile=io.StringIO(pdb_str))
@@ -157,9 +157,9 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                     except Exception as e3:
                         print(f"Secondary fallback (PDBFixer) failed: {e3}")
 
-                # 再次规范端基：确保闭环后按内部残基处理（删除 OXT、规整 N 端氢）
-                # 注意：如使用PDBFixer回退，需重新定位目标链对象
-                # 先重新获取目标链
+                # Normalize termini after cyclization: remove OXT and normalize N-terminal hydrogens.
+                # After the PDBFixer fallback, locate the target chain again.
+                # Retrieve the target chain again.
                 target_chain_ref = None
                 chain_ids = []
                 for ch in modeller.topology.chains():
@@ -173,12 +173,12 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                 if target_chain_ref is not None:
                     residues = list(target_chain.residues())
                     if len(residues) >= 2:
-                        # 若使用新的链引用，重新取残基
+                        # Retrieve residues from the updated chain reference.
                         if used_fix_method == "pdbfixer":
                             residues = list(target_chain_ref.residues())
                         first_res = residues[0]
                         last_res = residues[-1]
-                        # 重新确保闭环肽键存在（PDBFixer可能丢失跨残基键）
+                        # Restore the ring-closing bond if PDBFixer removed the inter-residue bond.
                         n_atom_fb = next((a for a in first_res.atoms() if a.name.strip().upper() == 'N'), None)
                         c_atom_fb = next((a for a in last_res.atoms() if a.name.strip().upper() == 'C'), None)
                         if n_atom_fb and c_atom_fb:
@@ -188,13 +188,13 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                             if not bond_exists_fb:
                                 modeller.topology.addBond(n_atom_fb, c_atom_fb)
                                 print(f"Fallback normalization: re-added peptide bond {first_res.name} N — {last_res.name} C")
-                        # 删除末端 OXT（若在补氢或补原子后被重新添加）
+                        # Remove terminal OXT if atom or hydrogen addition restored it.
                         oxt_to_delete = [a for a in last_res.atoms() if a.name.strip().upper() == 'OXT']
                         if oxt_to_delete:
                             modeller.delete(oxt_to_delete)
                             print(f"Fallback normalization: removed OXT from {last_res.name} {last_res.id}")
 
-                        # 规整首残 N 上的氢：PRO 不应有氢，其它残基最多保留一个
+                        # Normalize first-residue N hydrogens: none for PRO, at most one for other residues.
                         n_atom = next((a for a in first_res.atoms() if a.name.strip().upper() == 'N'), None)
                         if n_atom is not None:
                             bonded = []
@@ -221,7 +221,7 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                                         modeller.delete(to_delete)
                                         print(f"Fallback normalization: pruned extra N-H on {first_res.name} {first_res.id}, kept {keep.name if keep else 'one'}")
 
-                # 回退后重试创建系统（重新检测周期盒）
+                # Retry system creation after the fallback, checking periodic box vectors again.
                 has_box_fb = None
                 try:
                     has_box_fb = modeller.topology.getPeriodicBoxVectors()
@@ -246,29 +246,29 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                 except Exception as e3:
                     print(f"Fallback: system build still failing: {e3}")
                     raise
-                # 如果成功构建系统，更新目标链引用供后续约束使用
+                # Update the target chain reference after successful system creation for subsequent restraints.
                 if target_chain_ref is not None:
                     target_chain = target_chain_ref
             else:
-                # 与氢无关的错误，直接抛出
+                # Reraise errors unrelated to hydrogen assignment.
                 raise
 
-        # 再次规范端基：确保闭环后按内部残基处理（删除 OXT、规整 N 端氢）
+        # Normalize termini after cyclization: remove OXT and normalize N-terminal hydrogens.
         if target_chain is not None:
             residues = list(target_chain.residues())
             if len(residues) >= 2:
                 first_res = residues[0]
                 last_res = residues[-1]
-                # 删除末端 OXT（若在补氢或补原子后被重新添加）
+                # Remove terminal OXT if atom or hydrogen addition restored it.
                 oxt_to_delete = [a for a in last_res.atoms() if a.name.strip().upper() == 'OXT']
                 if oxt_to_delete:
                     modeller.delete(oxt_to_delete)
                     print(f"Terminal normalization: removed OXT from {last_res.name} {last_res.id} (post-fix/hydrogens)")
 
-                # 规整首残 N 上的氢：PRO 不应有氢，其它残基最多保留一个
+                # Normalize first-residue N hydrogens: none for PRO, at most one for other residues.
                 n_atom = next((a for a in first_res.atoms() if a.name.strip().upper() == 'N'), None)
                 if n_atom is not None:
-                    # 找到与 N 相连的氢
+                    # Find hydrogens bonded to N.
                     bonded = []
                     for b in modeller.topology.bonds():
                         if b.atom1 is n_atom:
@@ -278,27 +278,27 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                     hydrogens_on_n = [a for a in bonded if getattr(a, 'element', None) is not None and a.element is app.Element.getByAtomicNumber(1)]
 
                     if first_res.name.strip().upper().startswith('PRO'):
-                        # PRO 的 N 不应带氢
+                        # PRO nitrogen should have no attached hydrogen in this cyclic topology.
                         if hydrogens_on_n:
                             modeller.delete(hydrogens_on_n)
                             print(f"Terminal normalization: removed all N-H on PRO {first_res.id}")
                     else:
-                        # 其它残基最多保留一个 N-H（优先保留名字为 H/HN 的）
+                        # Keep at most one N-H for other residues, preferring H or HN.
                         keep = None
                         for cand_name in ('H', 'HN'):
                             keep = next((h for h in hydrogens_on_n if h.name.strip().upper() == cand_name), None)
                             if keep:
                                 break
-                        # 若未找到命名合适者，则保留第一个
+                        # If no preferred name is found, retain the first hydrogen.
                         if hydrogens_on_n:
                             to_delete = [h for h in hydrogens_on_n if h is not keep]
                             if len(hydrogens_on_n) > 1 and to_delete:
                                 modeller.delete(to_delete)
                                 print(f"Terminal normalization: pruned extra N-H on {first_res.name} {first_res.id}, kept {keep.name if keep else 'one'}")
 
-        # 可选：N–O 距离约束以缓解环化位点重叠
-        # 参数：开启开关、目标距离 r0（nm）、弹簧常数 k（kJ/mol/nm^2）、是否仅在“过近”时施加以及判定阈值
-        # 默认开启；支持平底单侧模式（只在 r < r_min 时施加）
+        # Optional N-O distance restraint to reduce overlap at the cyclization site.
+        # Parameters: enable switch, target r0 (nm), spring constant k (kJ/mol/nm^2), and one-sided threshold.
+        # Enabled by default; supports a one-sided flat-bottom restraint active only below r_min.
         no_restraint = os.environ.get('NO_DIST_RESTRAINT', '1').lower() in ['1','true','yes']
         no_r0_nm = float(os.environ.get('NO_R0_NM', '0.30'))
         no_k = float(os.environ.get('NO_K', '6000.0'))
@@ -325,10 +325,10 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                                 apply_this = False
                             if apply_this:
                                 if no_flat_bottom:
-                                    # 单侧平底：只在 r < r0 时推开，力常数 k_no
+                                    # One-sided flat bottom: repel only when r < r0, with spring constant k_no.
                                     expr = 'step(r0-r)*k_no*(r0-r)^2'
                                 else:
-                                    # 双侧谐波
+                                    # Two-sided harmonic restraint.
                                     expr = 'k_no*(r-r0)^2'
                                 no_force = openmm.CustomBondForce(expr)
                                 no_force.addGlobalParameter('k_no', no_k)
@@ -342,7 +342,7 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                     except Exception as e:
                         print(f"Failed to add N–O restraint: {e}")
 
-        # 7. 固定非闭环链
+        # 7. Fix chains other than the cyclic target chain.
         if target_chain is not None:
             force = openmm.CustomExternalForce('1000*(x-x0)^2 + 1000*(y-y0)^2 + 1000*(z-z0)^2')
             force.addPerParticleParameter('x0')
@@ -356,7 +356,7 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
         else:
             print("No target chain found, skipping position restraints")
 
-        # 8.（可选）闭环局部预约束：仅释放首/末残及其邻居，其余目标链原位约束，先做局部松弛
+        # 8. Optional local relaxation: release terminal residues and their neighbors while restraining the rest.
         local_warmup = os.environ.get('LOCAL_WARMUP', '1').lower() in ['1','true','yes']
         warmup_iters = int(os.environ.get('LOCAL_WARMUP_ITERS', '3000'))
         warmup_k = float(os.environ.get('LOCAL_WARMUP_K', '2000.0'))  # kJ/mol/nm^2
@@ -384,9 +384,9 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
             else:
                 print("Local warmup requested, but no atoms qualified; skipping warmup stage")
 
-        #（回退）移除 O-kick 坐标微调，保持原始最小化流程
+        # Keep the standard minimization procedure without the former O-kick coordinate adjustment.
 
-        # 9. 模拟与能量最小化
+        # 9. Set up simulation and minimize energy.
         integrator = openmm.LangevinIntegrator(
             300*unit.kelvin,
             1.0/unit.picoseconds,
@@ -394,7 +394,7 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
         )
         integrator.setConstraintTolerance(0.00001)
 
-        # 兼容CUDA/CPU
+        # Support CUDA and CPU platforms.
         try:
             platform = openmm.Platform.getPlatformByName('CUDA')
             properties = {'Precision': 'mixed'}
@@ -405,42 +405,42 @@ def minimize_cyclic_pdb(input_pdb_path, output_pdb_path, cyclize_chain_id='B'):
                 simulation = Simulation(modeller.topology, system, integrator, platform)
                 print("CUDA not available, using CPU platform")
             except Exception:
-                # 最后回退到默认平台
+                # Fall back to the default platform.
                 simulation = Simulation(modeller.topology, system, integrator)
                 print("CUDA/CPU not available, using default platform")
 
         simulation.context.setPositions(modeller.positions)
-        # 验证初始能量
+        # Validate the initial energy.
         state = simulation.context.getState(getEnergy=True)
         try:
             print(f"Initial energy: {state.getPotentialEnergy().value_in_unit(unit.kilojoules_per_mole):.2f} kJ/mol")
         except Exception:
             print("Initial energy: (unavailable)")
-        # 能量最小化（两阶段：先局部，再全局）
+        # Minimize in two stages: local relaxation, then global minimization.
         if warmup_force is not None:
             try:
                 print(f"Warmup minimization: {warmup_iters} iterations with local restraints")
                 simulation.minimizeEnergy(maxIterations=warmup_iters)
             except Exception as e:
                 print(f"Warmup minimization failed: {e}")
-            # 关闭局部约束（将全局参数置零）
+            # Disable local restraints by setting their global parameter to zero.
             try:
                 simulation.context.setParameter('k_warmup', 0.0)
                 print("Warmup restraints disabled (k_warmup=0)")
             except Exception:
                 print("Failed to disable warmup via global parameter; continuing")
 
-        # 阶段 2：全局最小化
+        # Stage 2: global minimization.
         simulation.minimizeEnergy(maxIterations=10000)
-        # 记录阶段 2 最终能量
+        # Record the final energy after stage 2.
         try:
             state_final = simulation.context.getState(getEnergy=True)
             print(f"Final energy: {state_final.getPotentialEnergy().value_in_unit(unit.kilojoules_per_mole):.2f} kJ/mol")
         except Exception:
             print("Final energy: (unavailable)")
 
-        # 10. 保存结果
-        # 使用最小化后的坐标，并在保存前移除所有氢原子
+        # 10. Save the result.
+        # Use minimized coordinates and remove all hydrogens before saving.
         state = simulation.context.getState(getPositions=True)
         positions = state.getPositions()
         modeller_out = Modeller(modeller.topology, positions)

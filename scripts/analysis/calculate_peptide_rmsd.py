@@ -152,11 +152,11 @@ def main():
     docked_files = glob.glob(os.path.join(docked_dir, '*_best.pdb'))
     print(f'Found {len(docked_files)} docked files')
 
-    # 创建保存结构完好的目录
+    # Create a directory for intact structures.
     intact_dir = os.path.join(output_dir, 'C-N_cylic_intact')
     os.makedirs(intact_dir, exist_ok=True)
 
-    # 为初始结构和对接结构创建子目录
+    # Create subdirectories for initial and docked structures.
     initial_intact_dir = os.path.join(intact_dir, 'initial')
     docked_intact_dir = os.path.join(intact_dir, 'docked')
     os.makedirs(initial_intact_dir, exist_ok=True)
@@ -185,9 +185,9 @@ def main():
         docked_struct = parser.get_structure('docked_check', docked_file)
         initial_struct = parser.get_structure('initial_check', initial_file)
 
-        # 检查初始结构和对接结构是否都完好
+        # Check that both initial and docked structures are intact.
         if check_cyclic_connected(docked_struct) and check_cyclic_connected(initial_struct):
-            # 保存结构完好的初始结构和对接结构
+            # Save the intact initial and docked structures.
             import shutil
             initial_basename = os.path.basename(initial_file)
             shutil.copy2(initial_file, os.path.join(initial_intact_dir, initial_basename))

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-功能：
-批量处理 RFdiffusion 生成的环肽骨架：
-1. 将每个结构的 A 链替换为参考结构 LspA.pdb 的 A 链
-2. 对齐参考后保存为 *_g.pdb
-3. 输出目录：02_rf_diffusion_gai/cyclic/
+Purpose:
+Batch preparation of RFdiffusion-generated cyclic-peptide backbones:
+1. Replace chain A in each structure with chain A from the reference PDB.
+2. Align to the reference and save as *_g.pdb.
+3. Default output directory: 02_rf_diffusion_gai/cyclic/.
 """
 
 
@@ -20,67 +20,67 @@ import glob
 import pymol
 from pymol import cmd
 
-# ============ 1. 路径配置 ============
-###基础路径
+# ============ 1. Path configuration ============
+### Base path.
 BASE_DIR = f"{WORKFLOW}"
-###参考蛋白结构
+### Reference protein structure.
 reference_pdb = os.environ.get("LSP_REFERENCE_PDB") or os.environ.get("LSP_TARGET_PDB")
 if not reference_pdb:
     raise SystemExit("Set LSP_TARGET_PDB or LSP_REFERENCE_PDB to the receptor chain A PDB")
 REF_PDB = env_path("LSP_REFERENCE_PDB", reference_pdb)
-###输入目录
+### Input directory.
 INPUT_DIR = env_path("LSP_INPUT_DIR", f"{WORKFLOW}/01_rf_diffusion/cyclic")
-###输出目录
+### Output directory.
 OUTPUT_DIR = env_path("LSP_OUTPUT_DIR", f"{WORKFLOW}/02_rf_diffusion_gai/cyclic")
 LOG_FILE = os.path.join(OUTPUT_DIR, "pymol_convert.log")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# ============ 2. 初始化 PyMOL ============
-pymol.finish_launching(['pymol', '-cq'])  # -c 安静模式，-q 不显示 GUI
+# ============ 2. Initialize PyMOL ============
+pymol.finish_launching(['pymol', '-cq'])  # Run headless (-c) and quiet (-q).
 
-# ============ 3. 扫描输入文件 ============
+# ============ 3. Scan input files ============
 pdb_files = sorted(glob.glob(f"{INPUT_DIR}/*.pdb"))
-print(f"[INFO] 检测到 {len(pdb_files)} 个输入文件")
+print(f"[INFO] Found {len(pdb_files)} input files")
 if not pdb_files:
     raise SystemExit(f"No PDB inputs: {INPUT_DIR}")
 
-# ============ 4. 主循环 ============
+# ============ 4. Main loop ============
 with open(LOG_FILE, "a") as log:
     for pdb_path in pdb_files:
         pdb_name = os.path.basename(pdb_path)
         output_path = os.path.join(OUTPUT_DIR, pdb_name.replace(".pdb", "_g.pdb"))
 
-        # 跳过已存在文件
+        # Skip existing output files.
         if os.path.exists(output_path):
-            print(f"[SKIP] 已存在：{output_path}")
+            print(f"[SKIP] Already exists: {output_path}")
             continue
 
         try:
-            # 加载参考与目标
-            cmd.reinitialize()  # 清空环境
+            # Load reference and target structures.
+            cmd.reinitialize()  # Clear the session.
             cmd.load(REF_PDB, "ref")
             cmd.load(pdb_path, "complex")
 
-            # 对齐 A 链
+            # Align chain A.
             cmd.align("complex and chain A", "ref and chain A")
 
-            # 删除 complex 的原 A 链
+            # Remove the original chain A from the complex.
             cmd.remove("complex and chain A")
 
-            # 将 ref 的 A 链复制到 complex
+            # Copy reference chain A into the complex.
             cmd.create("complex", "complex or (ref and chain A)")
 
-            # 保存
+            # Save the structure.
             cmd.save(output_path, "complex")
 
-            log.write(f"成功 {pdb_name}\n")
+            log.write(f"Success {pdb_name}\n")
             print(f"[OK] {pdb_name}")
 
         except Exception as e:
-            log.write(f"失败 {pdb_name}: {e}\n")
+            log.write(f"Failed {pdb_name}: {e}\n")
             print(f"[ERROR] {pdb_name}: {e}")
 
-# ============ 5. 清理 ============
+# ============ 5. Cleanup ============
 cmd.quit()
-print("[INFO] 全部处理完成 ✅")
+print("[INFO] Processing completed")

@@ -1,57 +1,57 @@
 # LspA peptide inhibitor design
 
-LspA 环肽抑制剂设计代码，包含 RF 骨架生成、LigandMPNN 序列设计、HADDOCK3 对接、PRODIGY 评分、结构优化和分析绘图。
+LspA cyclic peptide inhibitor design workflow, including RF backbone generation, LigandMPNN sequence design, HADDOCK3 docking, PRODIGY scoring, structural refinement, and analysis plots.
 
-## 设计参数
+## Design parameters
 
-| 阶段 | 环肽长度 | CA / frame 噪声 | 扩散步数 T | 骨架数 |
+| Stage | Cyclic peptide length | CA / frame noise | Diffusion steps T | Backbones |
 |---|---|---|---|---|
-| 首轮设计 | 8–15 aa | 0.1 / 0.1 | 50–200，间隔10 | 每个T生成100个，共1,600个 |
-| 二轮设计 | 8–12 aa | 0.2 / 0.2 | 20、30、40、50 | 每个T生成100个，共400个 |
+| Initial design | 8–15 aa | 0.1 / 0.1 | 50–200 in steps of 10 | 100 per T; 1,600 total |
+| Second-round design | 8–12 aa | 0.2 / 0.2 | 20, 30, 40, 50 | 100 per T; 400 total |
 
-每个骨架使用 LigandMPNN 生成10条序列。参数集中在 `config/design_presets.json`，也可以用命令行参数覆盖。
+LigandMPNN generates 10 sequences per backbone. Presets are defined in `config/design_presets.json` and can be overridden on the command line.
 
-## 目录
+## Directory structure
 
 ```text
 LspA_lipid_pocket/
 ├── README.md
-├── run.sh                       # 统一运行入口
-├── requirements-analysis.txt    # 分析绘图依赖
-├── config/                      # 参数和路径配置
-├── lib/                         # 共用路径处理
+├── run.sh                       # Common entry point
+├── requirements-analysis.txt    # Analysis and plotting dependencies
+├── config/                      # Parameters and path configuration
+├── lib/                         # Shared path utilities
 └── scripts/
-    ├── design/                  # RF骨架生成
-    ├── preparation/             # 受体替换、B链提取和合并
-    ├── sequence/                # LigandMPNN及序列筛选
-    ├── docking/                 # HADDOCK3对接
-    ├── scoring/                 # PRODIGY评分
-    ├── refinement/              # OpenMM最小化、Rosetta界面指标
-    └── analysis/                # 组成、logo、RMSD、口袋及评分分布
+    ├── design/                  # RF backbone generation
+    ├── preparation/             # Receptor replacement, chain B extraction and merging
+    ├── sequence/                # LigandMPNN and sequence selection
+    ├── docking/                 # HADDOCK3 docking
+    ├── scoring/                 # PRODIGY scoring
+    ├── refinement/              # OpenMM minimization and Rosetta interface metrics
+    └── analysis/                # Composition, logos, RMSD, pockets and score distributions
 ```
 
-## 环境与输入
+## Environment and inputs
 
-使用 Python >=3.9 和 Bash。运行各阶段前激活对应工具环境：
+Use Python >=3.9 and Bash. Activate the appropriate tool environment before each stage:
 
-| 阶段 | 依赖 |
+| Stage | Dependencies |
 |---|---|
-| 骨架生成 | 支持 `inference.cyclic` 的 RFdiffusion/RFpeptide、模型权重、target adjacency、scaffold库 |
-| 序列设计 | LigandMPNN、膜环境模型和侧链模型权重 |
-| 结构准备 | PyMOL；单独提取链的脚本只需Python标准库 |
-| 对接与评分 | HADDOCK3/CNS、命令行PRODIGY |
-| 结构优化 | OpenMM/PDBFixer、PyRosetta |
-| 分析绘图 | `pip install -r requirements-analysis.txt` |
+| Backbone generation | RFdiffusion/RFpeptide with `inference.cyclic` support, model weights, target adjacency and a scaffold library |
+| Sequence design | LigandMPNN with membrane-model and side-chain-model weights |
+| Structure preparation | PyMOL; standalone chain extraction requires only the Python standard library |
+| Docking and scoring | HADDOCK3/CNS and command-line PRODIGY |
+| Structural refinement | OpenMM/PDBFixer and PyRosetta |
+| Analysis and plotting | `pip install -r requirements-analysis.txt` |
 
-结构、模型权重和结果数据放在代码目录之外，通过配置指定路径。
+Store structures, model weights and results outside the code directory and specify their paths in the configuration.
 
 ```bash
 cd LspA_lipid_pocket
-# 新机器上创建配置；已有local.env时直接编辑。
+# Create a configuration on a new machine; edit local.env directly if it already exists.
 cp config/example.env config/local.env
 ```
 
-编辑 `config/local.env`，至少设置：
+Edit `config/local.env` and set at least:
 
 ```bash
 export RFDIFFUSION_DIR=/path/to/RFdiffusion
@@ -61,51 +61,51 @@ export LSP_ADJ_FILE=/path/to/LspA_adj.pt
 export LSP_SCAFFOLD_DIR=/path/to/ppi_scaffolds
 ```
 
-`LSP_TARGET_PDB` 应为保留原受体残基编号的 A 链 PDB。可另设 `LSP_REFERENCE_PDB` 作为替换受体时的参考。二轮模板通过 `--target` 指定包含 A/B 链的复合物。请按本机环境填写 `local.env` 中的路径。
+`LSP_TARGET_PDB` should contain receptor chain A with its original residue numbering. Optionally set `LSP_REFERENCE_PDB` as the reference for receptor replacement. For the second round, use `--target` to specify a template complex containing chains A and B. Set paths in `local.env` for your installation.
 
-默认输出位于 `results/workflow`、`results/docking`、`results/analysis`；可用 `LSP_WORKFLOW_DIR`、`LSP_DATA_DIR`、`LSP_ANALYSIS_DIR` 修改。下列示例使用默认输出目录，并从代码根目录执行。`local.env` 和生成结果已加入 `.gitignore`。
+Default outputs are `results/workflow`, `results/docking` and `results/analysis`; override them with `LSP_WORKFLOW_DIR`, `LSP_DATA_DIR` and `LSP_ANALYSIS_DIR`. Run the examples below from the repository root using the default output paths. `local.env` and generated results are excluded by `.gitignore`.
 
-## 首轮设计
+## Initial design
 
 ```bash
-# 查看帮助；预览一个生成命令。
+# Show help and preview a generation command.
 bash run.sh --help
 bash run.sh design/generate_backbones.py --t-values 50 --count-per-t 1 --dry-run
 
-# 生成1,600个骨架，长度8–15 aa，噪声0.1。
+# Generate 1,600 backbones of 8–15 aa with noise 0.1.
 bash run.sh design/generate_backbones.py --mode cyclic
 
-# 替换受体A链。
+# Replace receptor chain A.
 bash run.sh preparation/replace_receptor.py
 
-# 每骨架设计10条序列并包装侧链。
+# Design 10 sequences per backbone and pack side chains.
 bash run.sh sequence/design_sequences.py \
   --input-dir results/workflow/02_rf_diffusion_gai/cyclic \
   --output-dir results/workflow/03_MPNN/cyclic
 
-# 按最高overall_confidence选出每骨架的代表序列。
+# Select the sequence with the highest overall_confidence for each backbone.
 bash run.sh sequence/select_best_packed.py \
   --input-dir results/workflow/03_MPNN/cyclic \
   --output-dir results/workflow/04_select_MPNN/cyclic
 
-# 提取B链并连续编号。
+# Extract chain B and renumber residues consecutively.
 bash run.sh preparation/extract_chain.py \
   --input results/workflow/04_select_MPNN/cyclic --pattern '*/packed/*.pdb' \
   --output-dir results/workflow/05_peptide_chains/cyclic --chain B --renumber
 
-# 对接。
+# Run docking.
 bash run.sh docking/run_haddock3_batch.sh
 
-# 对接结构评分。
+# Score docked structures.
 bash run.sh scoring/prodigy_batch.py \
   --input-dir results/docking/xiao_haddock3_cyclic_batch/best_pdb_all \
   --summary results/docking/xiao_haddock3_cyclic_batch/global_score_summary.tsv \
   --output-dir results/docking/xiao_haddock3_cyclic_batch
 ```
 
-## 二轮设计
+## Second-round design
 
-选定首轮复合物作为模板，生成8–12 aa环肽，噪声0.2。
+Use a selected first-round complex as the template to generate 8–12 aa cyclic peptides with noise 0.2.
 
 ```bash
 bash run.sh design/generate_backbones.py --mode refine \
@@ -137,9 +137,9 @@ bash run.sh scoring/prodigy_batch.py \
   --output-dir results/docking/cyclic_refine
 ```
 
-## 可选的结构优化与分组评分
+## Optional refinement and grouped scoring
 
-将二轮全部packed B链合回参考复合物，再最小化和按骨架筛选：
+Merge all second-round packed chain B structures into the reference complex, minimize, and select by backbone:
 
 ```bash
 LSP_OUTPUT_DIR="$PWD/results/workflow/merged/cyclic_refine" \
@@ -162,21 +162,21 @@ LSP_MODEL_SUBDIR="merge_pdb/minimized" \
 bash run.sh analysis/plot_rosetta_distributions.py
 ```
 
-OpenMM输出保留输入相对目录并追加 `minimized/`；输出目录应放在输入目录之外。分组评分生成 `final_all.tsv`、`final_summary.tsv` 和 `best_structures/`。
+OpenMM preserves relative input paths and appends `minimized/`; place the output directory outside the input directory. Grouped scoring produces `final_all.tsv`, `final_summary.tsv` and `best_structures/`.
 
-## 分析脚本
+## Analysis scripts
 
-所有分析结果默认写入 `results/analysis`。
+All analysis outputs default to `results/analysis`.
 
-| 脚本 | 主要输入变量 |
+| Script | Main input variables |
 |---|---|
-| `analysis/plot_peptide_composition.py` | `LSP_INPUT_DIR`：PDB目录；更换输入时使用新的 `LSP_ANALYSIS_DIR` |
-| `analysis/plot_sequence_logos.py` | `LSP_INPUT_DIR`：PDB目录 |
-| `analysis/calculate_peptide_rmsd.py` | `LSP_INITIAL_DIR`：样本/packed/唯一PDB；`LSP_DOCKED_DIR`：`*_best.pdb`目录，使用原样本命名对应关系 |
-| `analysis/analyze_binding_pockets.py` | `LSP_INPUT_DIR`：对接复合物；`LSP_SCORES_TSV`：评分表 |
-| `analysis/compare_prodigy_by_length.py` | `LSP_INITIAL_TSV`、`LSP_OPTIMIZED_TSV`：同一骨架优化前后的配对评分 |
-| `refinement/rosetta_interface_metrics.py` | `LSP_SUMMARY_TSV`、`LSP_PDB_ROOT`、`LSP_MODEL_SUBDIR`；`LSP_WORKERS`控制进程数 |
-| `analysis/plot_rosetta_distributions.py` | `LSP_INPUT_CSV`：含dSASA/ddG/BUH/CYCttE列的CSV |
+| `analysis/plot_peptide_composition.py` | `LSP_INPUT_DIR`: PDB directory; use a new `LSP_ANALYSIS_DIR` when changing inputs |
+| `analysis/plot_sequence_logos.py` | `LSP_INPUT_DIR`: PDB directory |
+| `analysis/calculate_peptide_rmsd.py` | `LSP_INITIAL_DIR`: sample/packed/unique PDB; `LSP_DOCKED_DIR`: directory of `*_best.pdb` files matched by original sample names |
+| `analysis/analyze_binding_pockets.py` | `LSP_INPUT_DIR`: docked complexes; `LSP_SCORES_TSV`: score table |
+| `analysis/compare_prodigy_by_length.py` | `LSP_INITIAL_TSV`, `LSP_OPTIMIZED_TSV`: paired scores for the same backbones before and after optimization |
+| `refinement/rosetta_interface_metrics.py` | `LSP_SUMMARY_TSV`, `LSP_PDB_ROOT`, `LSP_MODEL_SUBDIR`; `LSP_WORKERS` controls worker count |
+| `analysis/plot_rosetta_distributions.py` | `LSP_INPUT_CSV`: CSV containing dSASA/ddG/BUH/CYCttE columns |
 
 ```bash
 LSP_INPUT_DIR=/path/to/complexes \
@@ -184,10 +184,10 @@ LSP_ANALYSIS_DIR="$PWD/results/composition" \
   bash run.sh analysis/plot_peptide_composition.py
 ```
 
-## 运行控制
+## Execution controls
 
-- RF可用 `--t-values`、`--count-per-t`、`--noise` 和 `--contigs` 覆盖参数；`--dry-run`只预览命令。线性对照使用 `--mode linear`，不进入环肽专用对接流程。
-- HADDOCK默认每任务4核、并发1个；通过 `LSP_CPUS_PER_TASK` 和 `LSP_MAX_CONCURRENT` 调整。
-- `LSP_PREPARE_ONLY=1` 只生成对接配置，建议配合独立的 `LSP_OUTPUT_DIR`；正式计算使用新目录。
-- RF跳过已存在的非空 `_0.pdb`；MPNN和HADDOCK跳过已有任务目录。重新计算时指定新的输出目录。
-- 运行入口可通过 `LSP_PYTHON` 指定解释器；各阶段使用对应的已激活环境。
+- Override RF parameters with `--t-values`, `--count-per-t`, `--noise` and `--contigs`; `--dry-run` previews commands. Use `--mode linear` for linear controls, which do not enter the cyclic-peptide docking workflow.
+- HADDOCK defaults to 4 cores per task and 1 concurrent task. Adjust with `LSP_CPUS_PER_TASK` and `LSP_MAX_CONCURRENT`.
+- `LSP_PREPARE_ONLY=1` generates docking configurations only. Use a separate `LSP_OUTPUT_DIR` and a fresh directory for production runs.
+- RF skips existing nonempty `_0.pdb` files; MPNN and HADDOCK skip existing task directories. Choose a new output directory to rerun a calculation.
+- Set `LSP_PYTHON` to select the entry-point interpreter; activate the appropriate environment for each stage.

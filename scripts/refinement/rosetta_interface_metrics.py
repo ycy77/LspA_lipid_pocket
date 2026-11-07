@@ -16,29 +16,29 @@ from pyrosetta.rosetta.core.scoring import ScoreFunctionFactory
 from pyrosetta.rosetta.protocols.minimization_packing import MinMover
 from pyrosetta.rosetta.core.kinematics import MoveMap
 
-# 每个进程的初始化函数
+# Initialize each worker process.
 def init_worker():
-    # 每个进程需要单独初始化Pyrosetta
+    # Initialize PyRosetta separately in every process.
     pyrosetta.init()
 
-# 计算单个结构的指标
+# Calculate metrics for one structure.
 def process_pdb(args):
     backbone, best_model, pdb_path = args
     try:
-        # 加载结构
+        # Load the structure.
         pose = pyrosetta.Pose()
         pyrosetta.pose_from_file(pose, pdb_path)
 
-        # 创建得分函数
+        # Create the score function.
         scorefxn = ScoreFunctionFactory.create_score_function("ref2015")
 
-        # 创建MoveMap，允许所有原子移动
+        # Create a MoveMap permitting backbone, side-chain and jump degrees of freedom.
         movemap = MoveMap()
-        movemap.set_bb(True)  # 允许 backbone 移动
-        movemap.set_chi(True)  # 允许侧链移动
-        movemap.set_jump(True)  # 允许链间移动
+        movemap.set_bb(True)  # Allow backbone motion.
+        movemap.set_chi(True)  # Allow side-chain motion.
+        movemap.set_jump(True)  # Allow inter-chain rigid-body motion.
 
-        # 能量最小化
+        # Minimize energy.
         min_mover = MinMover()
         min_mover.movemap(movemap)
         min_mover.score_function(scorefxn)
@@ -47,19 +47,19 @@ def process_pdb(args):
         min_mover.max_iter(1000)
         min_mover.apply(pose)
 
-        # 创建InterfaceAnalyzerMover来计算界面指标
+        # Create an InterfaceAnalyzerMover for interface metrics.
         interface_mover = InterfaceAnalyzerMover()
         interface_mover.set_scorefunction(scorefxn)
-        interface_mover.set_interface("A_B")  # 假设界面是A链和B链之间
+        interface_mover.set_interface("A_B")  # Analyze the interface between chains A and B.
         interface_mover.apply(pose)
 
-        # 获取dSASA (界面溶剂可及表面积变化)
+        # Get dSASA (change in solvent-accessible surface area at the interface).
         dsasa = interface_mover.get_interface_delta_sasa()
 
-        # 获取ddG (界面能量变化)
+        # Get ddG (interface energy change).
         ddg = interface_mover.get_interface_dG()
 
-        # 获取BUH (埋藏未满足氢键数)
+        # Get BUH (buried unsatisfied hydrogen-bond count).
         buh = interface_mover.get_interface_delta_hbond_unsat()
 
         # Legacy CSV name CYCttE: this is the total ref2015 score, not a cycle-specific energy.
@@ -70,9 +70,9 @@ def process_pdb(args):
         error_msg = str(e)
         return (backbone, best_model, "N/A", "N/A", "N/A", "N/A", False, error_msg)
 
-# 主函数
+# Main function.
 def main():
-    # 读取final_summary_with_Bcount.tsv文件
+    # Read the summary TSV file.
     tsv_file = env_path("LSP_SUMMARY_TSV", f"{DATA}/cyclic_youhua_1/final_summary.tsv")
     pdb_files = []
 
@@ -81,50 +81,50 @@ def main():
         for row in reader:
             backbone = row['Backbone']
             best_model = row['Best_Model']
-            # 构建完整路径
+            # Construct the full path.
             pdb_path = os.path.join(env_path("LSP_PDB_ROOT", f"{DATA}/cyclic_youhua_1"), backbone, os.environ.get("LSP_MODEL_SUBDIR", "minimized"), best_model)
             if os.path.exists(pdb_path):
                 pdb_files.append((backbone, best_model, pdb_path))
 
-    print(f"找到 {len(pdb_files)} 个PDB文件")
+    print(f"Found {len(pdb_files)} PDB files")
 
-    # 定义输出文件
+    # Define the output file.
     output_file = env_path("LSP_OUTPUT_CSV", f"{ANALYSIS}/pyrosetta_youhua_results_minimized2.csv")
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     if not pdb_files:
         raise SystemExit("No structures matched the summary; check LSP_PDB_ROOT and LSP_MODEL_SUBDIR")
 
-    # 写入表头
+    # Write the header.
     with open(output_file, "w") as f:
         f.write("Backbone,Best_Model,dSASA,ddG,BUH,CYCttE\n")
 
-    # 准备参数
+    # Prepare worker arguments.
     params = [(backbone, best_model, pdb_path) for backbone, best_model, pdb_path in pdb_files]
 
-    # 使用多进程处理
-    num_processes = max(1, min(multiprocessing.cpu_count(), int(os.environ.get("LSP_WORKERS", "4"))))  # 使用最多36个进程
-    print(f"使用 {num_processes} 个进程进行计算")
+    # Process structures with multiple workers.
+    num_processes = max(1, min(multiprocessing.cpu_count(), int(os.environ.get("LSP_WORKERS", "4"))))  # Limit workers to LSP_WORKERS (default 4) and available CPUs.
+    print(f"Using {num_processes} worker processes")
 
     with Pool(processes=num_processes, initializer=init_worker) as pool:
         results = pool.imap(process_pdb, params, chunksize=1)
 
-        # 处理结果
+        # Process results.
         for i, result in enumerate(results):
             backbone, best_model, dsasa, ddg, buh, cyctte, success, error_msg = result
             progress = (i + 1) / len(pdb_files) * 100
 
             if success:
-                print(f"[{progress:.1f}%] 成功: {backbone} - dSASA={dsasa:.2f}, ddG={ddg:.2f}, BUH={buh}, CYCttE={cyctte:.2f}")
-                # 写入成功结果
+                print(f"[{progress:.1f}%] Success: {backbone} - dSASA={dsasa:.2f}, ddG={ddg:.2f}, BUH={buh}, CYCttE={cyctte:.2f}")
+                # Write successful results.
                 with open(output_file, "a") as f:
                     f.write(f"{backbone},{best_model},{dsasa},{ddg},{buh},{cyctte}\n")
             else:
-                print(f"[{progress:.1f}%] 失败: {backbone} - {error_msg}")
-                # 写入失败结果
+                print(f"[{progress:.1f}%] Failed: {backbone} - {error_msg}")
+                # Write failed results.
                 with open(output_file, "a") as f:
                     f.write(f"{backbone},{best_model},N/A,N/A,N/A,N/A\n")
 
-    print(f"\n分析完成，结果已保存到 {output_file}")
+    print(f"\nAnalysis completed; results saved to {output_file}")
     return output_file
 
 if __name__ == "__main__":

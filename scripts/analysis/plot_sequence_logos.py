@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import logomaker
 from Bio.PDB import PDBParser
 
-# 氨基酸三字母到单字母的映射
+# Map three-letter amino acid codes to one-letter codes.
 aa_3to1 = {
     'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
     'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
@@ -25,45 +25,45 @@ aa_3to1 = {
     'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V'
 }
 
-# 用户提供的配色方案
+# User-specified color palette.
 simple_light_colors = {
-    # 疏水（非极性）
+    # Hydrophobic (nonpolar).
     'A': '#cb5148', 'V': '#cb5148', 'L': '#cb5148', 'I': '#cb5148','Y': '#cb5148',
     'M': '#cb5148', 'F': '#cb5148', 'W': '#cb5148', 'P': '#cb5148','G': '#cb5148',
-    # 极性（不带电）
+    # Polar (uncharged).
     'S': "#0cd26f", 'T': '#0cd26f', 'N': '#0cd26f', 'Q': '#0cd26f', 'C': '#0cd26f',
-    # 带电荷（负电）
+    # Negatively charged.
     'D': "#00b7ef", 'E': '#00b7ef',
-    # 带电荷（正电）
+    # Positively charged.
     'K': "#2d22c7", 'R': '#2d22c7', 'H': '#2d22c7'
 }
 
-# PDB文件目录
+# PDB input directory.
 pdb_dir = env_path('LSP_INPUT_DIR', f'{DATA}/cyclic_youhua_1')
 
-# 查找所有PDB文件
+# Find all PDB files.
 pdb_files = glob.glob(os.path.join(pdb_dir, '**', '*.pdb'), recursive=True)
-print(f"找到 {len(pdb_files)} 个PDB文件")
+print(f"Found {len(pdb_files)} PDB files")
 
-# 初始化PDB解析器
+# Initialize the PDB parser.
 parser = PDBParser()
 
-# 存储所有B链序列
+# Store all chain B sequences.
 b_chain_sequences = defaultdict(list)
 
-# 提取B链序列
+# Extract chain B sequences.
 for pdb_file in pdb_files:
     try:
-        # 解析PDB文件
+        # Parse the PDB file.
         structure = parser.get_structure(os.path.basename(pdb_file), pdb_file)
 
-        # 获取B链
+        # Get chain B.
         for model in structure:
             if 'B' in model:
                 chain = model['B']
                 sequence = []
                 for residue in chain:
-                    if residue.id[0] == ' ':  # 只处理标准氨基酸
+                    if residue.id[0] == ' ':  # Process standard amino acids only.
                         resname = residue.get_resname()
                         if resname in aa_3to1:
                             sequence.append(aa_3to1[resname])
@@ -75,14 +75,14 @@ for pdb_file in pdb_files:
     except Exception as e:
         continue
 
-# 按长度分组统计
-print("\n按长度分组统计:")
+# Summarize sequences by length.
+print("\nSequence counts by length:")
 length_counts = {}
 for length, sequences in b_chain_sequences.items():
     length_counts[length] = len(sequences)
-    print(f"长度 {length}: {len(sequences)} 个序列")
+    print(f"Length {length}: {len(sequences)} sequences")
 
-# 保存序列信息到CSV
+# Save sequence information to CSV.
 all_sequences = []
 for length, sequences in b_chain_sequences.items():
     for seq in sequences:
@@ -90,60 +90,60 @@ for length, sequences in b_chain_sequences.items():
 
 df = pd.DataFrame(all_sequences)
 df.to_csv(f'{ANALYSIS}/b_chain_sequences.csv', index=False)
-print(f"\n已保存序列信息到: {ANALYSIS}/b_chain_sequences.csv")
+print(f"\nSequence information saved to: {ANALYSIS}/b_chain_sequences.csv")
 
-# 为每个长度组绘制LOGO图
+# Plot a sequence logo for each length group.
 for length in sorted(b_chain_sequences.keys()):
     sequences = b_chain_sequences[length]
-    print(f"\n绘制长度 {length} 的LOGO图，共 {len(sequences)} 个序列")
+    print(f"\nPlotting logo for length {length}, using {len(sequences)} sequences")
 
     if len(sequences) < 2:
-        print(f"长度 {length} 的序列数量不足，跳过")
+        print(f"Insufficient sequences for length {length}; skipping")
         continue
 
-    # 计算每个位置的氨基酸频率
+    # Calculate amino acid frequencies at each position.
     max_len = max(len(seq) for seq in sequences)
 
-    # 氨基酸顺序
+    # Amino acid order.
     aa_order = sorted(set(''.join(sequences)))
 
-    # 统计每个位置的氨基酸出现次数
+    # Count occurrences of each amino acid at each position.
     counts = defaultdict(lambda: [0] * max_len)
     for seq in sequences:
         for i, aa in enumerate(seq):
             counts[aa][i] += 1
 
-    # 计算频率矩阵
+    # Calculate the frequency matrix.
     freq_data = {}
     for aa in aa_order:
         freq_data[aa] = [count / len(sequences) for count in counts[aa]]
 
-    # 创建DataFrame（logomaker要求列是位置，行是氨基酸）
+    # Create the DataFrame for logomaker (positions as rows, amino acids as columns).
     df_logo = pd.DataFrame(freq_data)
 
-    # 绘制LOGO图
+    # Plot the sequence logo.
     fig, ax = plt.subplots(figsize=(max_len * 0.5, 3))
 
     try:
-        # 使用logomaker绘制，应用用户提供的配色方案
+        # Draw with logomaker using the specified color palette.
         logo = logomaker.Logo(df_logo, ax=ax, color_scheme=simple_light_colors)
 
-        # 设置标题和标签
+        # Set titles and labels.
         ax.set_title(f'Amino Acid Logo - Length {length} (n={len(sequences)})', fontsize=14, fontweight='bold')
         ax.set_xlabel('Position', fontsize=12)
         ax.set_ylabel('Frequency', fontsize=12)
 
-        # 保存图片
+        # Save the figure.
         output_path = f'{ANALYSIS}/logo_length_{length}.png'
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        print(f"已保存: {output_path}")
+        print(f"Saved: {output_path}")
 
         output_path_pdf = f'{ANALYSIS}/logo_length_{length}.pdf'
         plt.savefig(output_path_pdf, dpi=300, bbox_inches='tight', format='pdf')
-        print(f"已保存: {output_path_pdf}")
+        print(f"Saved: {output_path_pdf}")
     except Exception as e:
-        print(f"绘制LOGO图时出错: {e}")
+        print(f"Error plotting sequence logo: {e}")
     finally:
         plt.close()
 
-print("\n所有LOGO图绘制完成！")
+print("\nAll sequence logos completed!")

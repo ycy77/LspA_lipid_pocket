@@ -13,102 +13,102 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 
-# 读取最小化后的数据
+# Read the minimized-structure data.
 results = pd.read_csv(env_path('LSP_INPUT_CSV', f'{ANALYSIS}/pyrosetta_youhua_results_minimized2.csv'))
 
-# 过滤掉失败的计算
+# Exclude failed calculations.
 valid_results = results[results['dSASA'] != 'N/A']
 valid_results = valid_results.astype({'dSASA': float, 'ddG': float, 'BUH': float, 'CYCttE': float})
 
-# 剔除CYCttE大于0和ddG大于0的数据点
+# Exclude data points with CYCttE > 0 or ddG > 0.
 filtered_results = valid_results[(valid_results['CYCttE'] <= 0) & (valid_results['ddG'] <= 0)]
 
-print(f"有效数据数量: {len(filtered_results)}")
+print(f"Valid data points: {len(filtered_results)}")
 
-# 定义指标配置 - 使用参考图片中的配色
+# Configure metrics using the reference color palette.
 metrics = [
     {
         'key': 'ddG',
         'label': 'ddG(kcal/mol)',
         'title': 'Rosetta ddG',
-        'color': '#4CAF50',  # 绿色
+        'color': '#4CAF50',  # Green.
         'panel': 'a'
     },
     {
         'key': 'dSASA',
         'label': 'dSASA(Å²)',
         'title': 'Interface Area',
-        'color': '#FF9800',  # 橙色
+        'color': '#FF9800',  # Orange.
         'panel': 'b'
     },
     {
         'key': 'BUH',
         'label': 'BUH',
         'title': 'Buried Unsatisfied Hbonds',
-        'color': '#2196F3',  # 蓝色
+        'color': '#2196F3',  # Blue.
         'panel': 'c'
     },
     {
         'key': 'CYCttE',
         'label': 'CYCttE',
         'title': 'Distribution of total energy',
-        'color': '#E91E63',  # 粉色
+        'color': '#E91E63',  # Pink.
         'panel': 'd'
     }
 ]
 
-# 创建4面板图
+# Create a four-panel figure.
 fig, axs = plt.subplots(2, 2, figsize=(12, 10), sharey=False)
 axs = axs.flatten()
 
-# 绘制每个面板
+# Draw each panel.
 for i, metric in enumerate(metrics):
     ax = axs[i]
     data = filtered_results[metric['key']].values
 
     if len(data) > 0:
-        # 计算核密度估计 (KDE)
+        # Compute the kernel density estimate (KDE).
         kde = gaussian_kde(data)
 
-        # 创建平滑的x轴数据
+        # Create a smooth x-axis grid.
         x_range = np.linspace(data.min() * 0.95, data.max() * 1.05, 1000)
         density = kde(x_range)
 
-        # 绘制填充的密度曲线
+        # Draw the filled density curve.
         ax.fill_between(x_range, density, alpha=0.5, color=metric['color'])
         ax.plot(x_range, density, color=metric['color'], linewidth=2)
 
-        # 添加均值线
+        # Add the mean line.
         mean_val = data.mean()
         ax.axvline(mean_val, color='black', linestyle='--', linewidth=2)
 
-        # 添加图例
+        # Add the legend.
         ax.legend([metric['key']], loc='upper right', frameon=False)
 
-        # 设置标题和标签
+        # Set titles and labels.
         ax.set_title(f"{metric['panel']}", fontsize=16, fontweight='bold', loc='left')
         ax.set_title(metric['title'], fontsize=14, loc='center')
         ax.set_xlabel(metric['label'], fontsize=12)
         ax.set_ylabel('Density', fontsize=12)
 
-        # 添加网格
+        # Add the grid.
         ax.grid(True, alpha=0.2)
 
-        # 设置科学计数法
+        # Use scientific notation.
         ax.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
 
-# 调整布局
+# Adjust the layout.
 plt.tight_layout()
 
-# 保存为PDF格式
+# Save as PDF.
 output_path = f'{ANALYSIS}/density_minimized2.pdf'
 plt.savefig(output_path, dpi=300, bbox_inches='tight', format='pdf')
-print(f"已保存: {output_path}")
+print(f"Saved: {output_path}")
 
-# 保存为PNG格式
+# Save as PNG.
 output_path_png = f'{ANALYSIS}/density_minimized2.png'
 plt.savefig(output_path_png, dpi=300, bbox_inches='tight')
-print(f"已保存: {output_path_png}")
+print(f"Saved: {output_path_png}")
 
 plt.close()
-print("能量最小化后密度分布图绘制完成！")
+print("Post-minimization density plots completed!")

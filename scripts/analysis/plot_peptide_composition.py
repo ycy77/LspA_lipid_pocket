@@ -28,7 +28,7 @@ AMINO_ACIDS_SORTED = [
     'K', 'R', 'H'
 ]
 
-# 氨基酸三字母到单字母的映射
+# Map three-letter amino acid codes to one-letter codes.
 aa_3to1 = {
     'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
     'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
@@ -53,29 +53,29 @@ def main():
     else:
         print('Extracting sequences from PDB files...')
 
-        # 查找所有PDB文件
+        # Find all PDB files.
         pdb_files = glob.glob(os.path.join(pdb_dir, '**', '*.pdb'), recursive=True)
         print(f'Found {len(pdb_files)} PDB files')
 
-        # 初始化PDB解析器
+        # Initialize the PDB parser.
         parser = PDBParser()
 
-        # 存储所有B链序列
+        # Store all chain B sequences.
         all_sequences = []
 
-        # 提取B链序列
+        # Extract chain B sequences.
         for pdb_file in pdb_files:
             try:
-                # 解析PDB文件
+                # Parse the PDB file.
                 structure = parser.get_structure(os.path.basename(pdb_file), pdb_file)
 
-                # 获取B链
+                # Get chain B.
                 for model in structure:
                     if 'B' in model:
                         chain = model['B']
                         sequence = []
                         for residue in chain:
-                            if residue.id[0] == ' ':  # 只处理标准氨基酸
+                            if residue.id[0] == ' ':  # Process standard amino acids only.
                                 resname = residue.get_resname()
                                 if resname in aa_3to1:
                                     sequence.append(aa_3to1[resname])
@@ -113,13 +113,13 @@ def main():
             pickle.dump(data, f)
         print(f'Data saved to: {pickle_file}')
 
-    # 绘制序列长度分布柱状图
+    # Plot a bar chart of sequence lengths.
     length_counter = Counter(lengths)
     sorted_lengths = sorted(length_counter.items())
     x_lengths = [item[0] for item in sorted_lengths]
     y_lengths = [item[1] for item in sorted_lengths]
 
-    # 黄色渐变配色
+    # Use a yellow gradient palette.
     yellow_colors = ['#FFF59D', '#FFEE58', '#FFD54F', '#FFCA28', '#FFC107', '#FFB300', '#FFA000']
     colors_for_lengths = [yellow_colors[i % len(yellow_colors)] for i in range(len(x_lengths))]
 
@@ -143,7 +143,7 @@ def main():
     print(f'Length distribution plot saved to: {output_pdf1}')
     plt.close()
 
-    # 绘制氨基酸组成热图
+    # Plot the amino acid composition heatmap.
     unique_lengths = sorted(list(set(lengths)), reverse=True)
     length_aa_freq = np.zeros((len(unique_lengths), len(AMINO_ACIDS_SORTED)))
 
@@ -164,7 +164,7 @@ def main():
     fig2, ax2 = plt.subplots(figsize=(16, 10))
     max_freq = np.max(length_aa_freq)
 
-    # 黄色渐变色图
+    # Use a yellow gradient colormap.
     custom_cmap = mcolors.LinearSegmentedColormap.from_list(
         'yellow_cmap',
         ['#FFF9C4', '#FFF59D', '#FFEE58', '#FFD54F', '#FFCA28', '#FFC107', '#FFB300', '#FFA000', '#FF8F00'],

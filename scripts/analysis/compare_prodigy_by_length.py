@@ -94,7 +94,7 @@ def build_long() -> pd.DataFrame:
 
 
 def plot_raincloud(long_df: pd.DataFrame):
-    # 半小提琴（左右半边）+ 半边内部抖动散点；初次=左半边，优化=右半边
+    # Half violins with jittered points: initial on the left, optimized on the right.
     sns.set_theme(style="whitegrid", context="paper")
     plt.rcParams["pdf.fonttype"] = 42
     plt.rcParams["ps.fonttype"] = 42
@@ -105,7 +105,7 @@ def plot_raincloud(long_df: pd.DataFrame):
 
     fig, ax = plt.subplots(figsize=(max(8, 1.25 * len(order)), 5.8), constrained_layout=True)
 
-    # 先分别画两次居中小提琴（不使用 dodge），再对每个类别做左右半边裁剪
+    # Draw centered violins separately without dodge, then clip each category into halves.
     n_before = len(ax.collections)
     sns.violinplot(
         data=long_df[long_df["state"] == "Initial"],
@@ -134,23 +134,23 @@ def plot_raincloud(long_df: pd.DataFrame):
     )
     optimized_patches = ax.collections[n_before_opt:]
 
-    # 构造左右半边裁剪矩形（数据坐标系下）
+    # Build clipping rectangles in data coordinates.
     y_min, y_max = long_df["deltaG"].min(), long_df["deltaG"].max()
     y_pad = 0.05 * (y_max - y_min + 1e-9)
     total_height = (y_max - y_min) + 2 * y_pad
 
-    # 透明填充的颜色（仅保留边框颜色），Initial 左半、Optimized 右半
+    # Use transparent fills and colored outlines: initial left, optimized right.
     initial_rgba_transparent = to_rgba(palette["Initial"], alpha=0.0)
     optimized_rgba_transparent = to_rgba(palette["Optimized"], alpha=0.0)
 
-    # 对每个类别 i（x=i）做裁剪：Initial 留左半边，Optimized 留右半边
+    # Clip each category at x=i: initial left, optimized right.
     for i, _aa in enumerate(order):
-        # 左半边矩形：范围 [i-0.5, i]
+        # Left rectangle: [i-0.5, i].
         left_rect = plt.Rectangle((i - 0.5, y_min - y_pad), 0.5, total_height, transform=ax.transData)
-        # 右半边矩形：范围 [i, i+0.5]
+        # Right rectangle: [i, i+0.5].
         right_rect = plt.Rectangle((i, y_min - y_pad), 0.5, total_height, transform=ax.transData)
 
-        # 每次调用 violinplot 会依次生成各类别的一个 PolyCollection
+        # Each violinplot call creates one PolyCollection per category.
         if i < len(initial_patches):
             p = initial_patches[i]
             p.set_clip_path(left_rect)
@@ -166,7 +166,7 @@ def plot_raincloud(long_df: pd.DataFrame):
             p.set_linewidth(1.0)
             p.set_zorder(3)
 
-    # 在半边内叠加抖动散点：初次放左半，优化放右半
+    # Overlay jittered points within each half: initial left, optimized right.
     rng = np.random.default_rng(42)
     jitter_max = 0.18
     size_pts = 16
@@ -181,7 +181,7 @@ def plot_raincloud(long_df: pd.DataFrame):
         ax.scatter(xs_initial, ys_initial, s=size_pts, alpha=0.65, color=palette["Initial"], edgecolor="none", zorder=10, label=None)
         ax.scatter(xs_optimized, ys_optimized, s=size_pts, alpha=0.65, color=palette["Optimized"], edgecolor="none", zorder=10, label=None)
 
-    # 自定义图例（两个状态）
+    # Create a custom legend for the two states.
     from matplotlib.lines import Line2D
     handles = [
         Line2D([0], [0], marker='o', color='w', markerfacecolor=palette['Initial'], markersize=6, label='Initial'),
