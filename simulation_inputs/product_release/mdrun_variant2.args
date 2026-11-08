@@ -1,0 +1,1 @@
+-deffnm metad_variant2 -plumed plumed_variant2.dat -ntomp 1

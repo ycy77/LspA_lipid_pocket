@@ -1,0 +1,1 @@
+-deffnm metad -plumed plumed.dat -ntomp 1
